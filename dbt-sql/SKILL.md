@@ -217,12 +217,8 @@ tests:
         field: submission_key
 ```
 
-**Pass-Through & Renames:**
-- Same name as upstream → omit `description` (let upstream docs inherit). Upstream MUST have a description (doc block if used in 2+ models, inline otherwise).
-- Renamed, same concept → MUST establish a doc block. Both upstream and downstream reference it: `description: "{{ doc('<scope>__<term>') }}"`. No "Renamed from X" prose. Doc block name carries identity across the rename.
-- New derivation → fresh description (or macro for shared-body patterns).
-  - ❌ `"Renamed from `project_id`."` (inline rename prose)
-  - ❌ Pass-through col with no description anywhere in the lineage.
+**Shared Concepts (Pass-Through & Renames):**
+- As soon as a concept appears in 2+ models — same name (pass-through) or renamed — establish a `doc()` block and reference it from every model: `description: "{{ doc('<scope>__<term>') }}"`. Single-model concepts stay inline.
   - ✅ `description: "{{ doc('prismg2__workspace_id') }}"` on both `project_id` (source) and `workspace_id` (downstream).
 
 **Grain & Error Grains Contract:**
@@ -244,7 +240,7 @@ Before outputting code, verify against **ALL** domains:
 - [ ] **Naming:** Are enums/files `kebab-case`? Are SQL variables `lower_snake_case`? Are presentation aliases `Title Case`? Are `lookup_` vs `map_` prefixes correctly distinguished?
 - [ ] **Errors:** Are errors preserved as data (no silent drops)? Do error reasons use `kebab-case`? Do Marts filter errors out unless generating an error mart?
 - [ ] **YAML Tone:** Does YAML use block scalars (`|`) and document the business contract rather than SQL mechanics?
-- [ ] **YAML Rules:** Are there zero hard-coded values in docs? Are referenced identifiers wrapped in backticks? Are exact 1:1 pass-through columns omitted entirely from the downstream YAML, with the upstream column carrying a description (doc block or inline)? Are renamed columns wired through a doc block on both sides (no inline "Renamed from" prose)?
+- [ ] **YAML Rules:** Are there zero hard-coded values in docs? Are referenced identifiers wrapped in backticks? Is every concept used in 2+ models wired through a shared `doc()` block?
 - [ ] **Docs Scope:** Within-model repetition hoisted to model `description`? Cross-model concepts in doc blocks with correct scope prefix (`<source>__`, `<domain>__`, `conformed__`, `pattern__`) and correct file layout? Domain-scoped patterns kept narrow until a second consumer arrives?
 - [ ] **Contracts:** Is the Grain and Error Grain declared in the `.yml`? Does the first line of each CTE comment properly declare and match the YAML grain?
 - [ ] **Testing:** Do Fact tables (`fct_*`) have a surrogate key as the first column created from natural keys? Do Facts test `relationships` to dims? Are test configurations correctly nested under `arguments`?
