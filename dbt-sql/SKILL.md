@@ -1,8 +1,8 @@
 ---
 name: dbt-sql
 description: >
-  Strict analytics engineer skill. Enforces dbt, SQL, and YAML conventions exactly. 
-  Triggers when user mentions "sql", "dbt", "write dbt model", "refactor sql", "document dbt", "create yaml", 
+  Strict analytics engineer skill. Enforces dbt, SQL, and YAML conventions exactly.
+  Triggers when user mentions "sql", "dbt", "write dbt model", "refactor sql", "document dbt", "create yaml",
   "dbt conventions", "sql review", "dbt skill", or "sql skill".
 ---
 
@@ -25,7 +25,7 @@ Treat error as data. Never drop silent. Yield null + reason.
 - **Marts:** Filter errors (`where missing_result_reason is null`) unless error mart.
 - **Scope:** Filter out-domain via `where`. Missing metrics → yield fail reason.
 - **Grain:** Sub-grain fail → target null. No cartesian fill.
-- **Safe Join:** Equi-join drop null error grain. Avoid. Instead: `group by` root → `max(missing_reason)` → `left join`. 
+- **Safe Join:** Equi-join drop null error grain. Avoid. Instead: `group by` root → `max(missing_reason)` → `left join`.
 - **Origin:** `coalesce(` upstream fail, UDF fail, local fail `)`.
 - **Python/UDF:** Return `(result, error)` tuple. Or `{"$type": "error", "error": "reason"}`.
 - **Reason Naming:** kebab-case (`missing-base-trend`). Single metric: `missing_result_reason`. Multi: prefix metric.
@@ -112,6 +112,94 @@ Do not repeat concepts. Reference identifiers (columns, models) via backticks.
   - ✅ `description: |
       Matches `start_date` to `term_start_date`.`
 
+**Sentence Form:**
+Every doc body (inline `description`, `{% docs %}` block, hoisted clause body) is one or more complete sentences — capitalised, full-stopped, grammatical alone. Composition happens by concatenation: sentence + space + sentence, or sentence introduced by a colon. Never inline a doc body mid-sentence; capitalisation and full stops must survive.
+  - ❌ `description: "{{ doc('prismg2__phase') }} for matching `*_description`."` → "Project lifecycle phase... for matching..." (mid-sentence period, dangling fragment).
+  - ✅ `description: "{{ doc('prismg2__phase') }} {{ doc('prismg2__description') }}"` → two sentences, juxtaposed.
+
+**Hoisting:**
+Repeating col doc pattern within one model → hoist to model `description`. State rule once at model level. Per-col `description` empty, or only note deviation.
+Repeating col doc pattern across 2+ models → doc block (see below), not hoist.
+
+**Hoist sentence shape:**
+- Paired (anchor exists): `` `<concept>_<form>` columns, anchored on `<concept>_<other_form>`: {{ doc('<scope>__<form>') }} ``
+- Standalone (no anchor): `` `*_<form>` columns: {{ doc('<scope>__<form>') }} ``
+
+A hoist line has two parts:
+  1. **Identifier** — selector names which cols the rule covers. Use `<concept>_<form>` when a co-referring slot exists (the repeated `<concept>` token tells the reader the same prefix binds both sides, like a regex capture group). Use `*_<form>` when nothing co-refers.
+  2. **Anchor qualifier (optional)** — `anchored on <concept>_<other_form>` names the sibling col that carries the per-instance concept. Present only when the form has such a sibling.
+    - ✅ (paired) `` `<concept>_code` columns, anchored on `<concept>_description`: {{ doc('prismg2__code') }} `` → reader infers `phase_code` ↔ `phase_description`, `portfolio_code` ↔ `portfolio_description`, …
+    - ✅ (standalone) `` `*_sort_order_ambiguous` flags: {{ doc('prismg2__sort_order_ambiguous') }} ``
+    - ❌ (anchor dropped where a sibling exists) `` `*_code` columns: … `` → reader cannot reach the concept anchor.
+    - ❌ (anchor forced where no sibling exists) `` `*_sort_order_ambiguous` flags, anchored on `*_description`: … `` → invents an anchor the model does not encode.
+
+The `doc()` body must NOT repeat the form suffix — the selector (`*_<form>`) already names the form. Body describes what the form means, not which suffix carries it.
+  - ❌ body: "Columns suffixed `_pbi_escaped` apply escape characters..." (suffix repeated)
+  - ✅ body: "Escape characters applied to the raw description..." (form named once, by selector)
+
+**Doc Blocks (`{% docs %}`):**
+Use doc blocks for concepts referenced across 2+ models. Name with scope prefix:
+  - `<source>__` — owned by one source system (e.g. `prismg2__workspace_id`).
+  - `<domain>__` — owned by a business area, may span sources (e.g. `major_projects__excom_cost`).
+  - `conformed__` — enterprise-wide conformed dim/measure (e.g. `conformed__date`).
+  - `pattern__` — subject-agnostic modelling mechanic (e.g. `pattern__grain`, `pattern__pbi_escaped`).
+
+File layout:
+  - Source: `models/00_source/<source>.md` next to `<source>.yml`.
+  - All other scopes: `models/_docs/<scope>.md` (one file per domain; `_conformed.md`, `_patterns.md` for project-wide).
+
+Promotion: start narrow. Promote `<domain>__` → `pattern__` only when a second consumer exists (rule of two). Patterns live under the narrowest scope that owns them — a pattern used by one source stays in `<source>__` until a second source adopts it.
+
+**Concept × Form Composition:**
+Cols are often `<concept>_<form>` (e.g. `phase_code`, `phase_description`, `phase_description_pbi_escaped`). Concept and form are **separate doc blocks** — never fuse into one. Two cases:
+
+1. **Concept appears bare in the model** (e.g. `workspace_id` is itself a col) → concept doc on the bare col. Any `<concept>_<form>` variants follow Hoisting (form mechanic hoists to model desc; per-col empty).
+2. **Concept only suffixed** → pick **one** form col as the concept anchor (default `_description`; else most identity-bearing present: `_code` > `_name` > `_id`). Wire `description: "{{ doc('<scope>__<concept>') }} {{ doc('<scope>__<form>') }}"` there. All other forms for this concept follow Hoisting.
+
+Form doc blocks (`<scope>__code`, `pattern__pbi_escaped`, …) themselves obey rule-of-two — don't create one unless reused across ≥2 models.
+
+✅ Case 2 — suffixed-only concept, `_description` as anchor:
+```yaml
+# model description
+description: |
+  `<concept>_code` columns, anchored on `<concept>_description`: {{ doc('prismg2__code') }}
+  `<concept>_description_pbi_escaped` columns, anchored on `<concept>_description`: {{ doc('pattern__pbi_escaped') }}
+
+columns:
+  - name: phase_description
+    description: "{{ doc('prismg2__phase') }} {{ doc('prismg2__description') }}"
+  - name: phase_code           # empty — hoisted
+  - name: phase_description_pbi_escaped  # empty — hoisted
+```
+
+✅ Case 1 — bare concept present:
+```yaml
+- name: workspace_id
+  description: "{{ doc('prismg2__workspace_id') }}"
+```
+
+❌ Concept doc attached on every form col:
+```yaml
+- name: phase_code
+  description: "{{ doc('prismg2__phase') }} {{ doc('prismg2__code') }}"
+- name: phase_description
+  description: "{{ doc('prismg2__phase') }} {{ doc('prismg2__description') }}"
+- name: phase_description_pbi_escaped
+  description: "{{ doc('prismg2__phase') }} {{ doc('pattern__pbi_escaped') }}"
+```
+Why wrong: concept is named once per family, on the anchor only. Rest hoist.
+
+❌ Fused concept+form doc block:
+```sql
+{% docs prismg2__phase_code %}Prism G2 code for the Phase concept.{% enddocs %}
+```
+Why wrong: kills reuse of `phase` on `_description` and of `_code` across other concepts.
+
+**Parameterised Docs:**
+When description needs shared body + col-specific reference, wrap `doc()` in a macro returning markdown. Place macro under `macros/docs/`. Macro name signals the pattern (greppable).
+  - ❌ Hand-copy col name into 25 inline descriptions.
+  - ✅ `description: "{{ sort_order_doc('phase_description_pbi_escaped') }}"`
+
 **Fact Tables (`03_marts/fct_*` or `04_marts/fct_*`):**
 Surrogate key `<name>_key` first col. Use `dbt_utils.generate_surrogate_key`. Needs `unique`, `not_null` test.
 Fact tables must include `relationships` test to all associated Dim tables.
@@ -129,17 +217,19 @@ tests:
         field: submission_key
 ```
 
-**Pass-Through:**
-Do not document exact 1:1 pass-through columns at all (let upstream docs inherit). If a column name changes, only note the change. Do not restate upstream logic. State previous name, but no source model name.
-  - ❌ Documenting a column that wasn't renamed or modified.
-  - ❌ "Renamed from `school_gla_count` in `stg_buildings`."
-  - ✅ "Renamed from `school_gla_count`."
+**Pass-Through & Renames:**
+- Same name as upstream → omit `description` (let upstream docs inherit). Upstream MUST have a description (doc block if used in 2+ models, inline otherwise).
+- Renamed, same concept → MUST establish a doc block. Both upstream and downstream reference it: `description: "{{ doc('<scope>__<term>') }}"`. No "Renamed from X" prose. Doc block name carries identity across the rename.
+- New derivation → fresh description (or macro for shared-body patterns).
+  - ❌ `"Renamed from `project_id`."` (inline rename prose)
+  - ❌ Pass-through col with no description anywhere in the lineage.
+  - ✅ `description: "{{ doc('prismg2__workspace_id') }}"` on both `project_id` (source) and `workspace_id` (downstream).
 
 **Grain & Error Grains Contract:**
 ```yaml
 description: |
   Grain: `school_id`, `school_year`
-  
+
   Error Grains:
     - `missing_structural_base_reason`: `school_id`  -- Sub-grain fail
     - `invalid_grade_reason`: `school_id`, `school_year` -- Full grain fail
@@ -154,7 +244,8 @@ Before outputting code, verify against **ALL** domains:
 - [ ] **Naming:** Are enums/files `kebab-case`? Are SQL variables `lower_snake_case`? Are presentation aliases `Title Case`? Are `lookup_` vs `map_` prefixes correctly distinguished?
 - [ ] **Errors:** Are errors preserved as data (no silent drops)? Do error reasons use `kebab-case`? Do Marts filter errors out unless generating an error mart?
 - [ ] **YAML Tone:** Does YAML use block scalars (`|`) and document the business contract rather than SQL mechanics?
-- [ ] **YAML Rules:** Are there zero hard-coded values in docs? Are referenced identifiers wrapped in backticks? Are exact 1:1 pass-through columns omitted entirely from the YAML to allow upstream inheritance?
+- [ ] **YAML Rules:** Are there zero hard-coded values in docs? Are referenced identifiers wrapped in backticks? Are exact 1:1 pass-through columns omitted entirely from the downstream YAML, with the upstream column carrying a description (doc block or inline)? Are renamed columns wired through a doc block on both sides (no inline "Renamed from" prose)?
+- [ ] **Docs Scope:** Within-model repetition hoisted to model `description`? Cross-model concepts in doc blocks with correct scope prefix (`<source>__`, `<domain>__`, `conformed__`, `pattern__`) and correct file layout? Domain-scoped patterns kept narrow until a second consumer arrives?
 - [ ] **Contracts:** Is the Grain and Error Grain declared in the `.yml`? Does the first line of each CTE comment properly declare and match the YAML grain?
 - [ ] **Testing:** Do Fact tables (`fct_*`) have a surrogate key as the first column created from natural keys? Do Facts test `relationships` to dims? Are test configurations correctly nested under `arguments`?
 - [ ] **Kimball:** Does the model design strictly follow Kimball dimensional modeling best practices?
