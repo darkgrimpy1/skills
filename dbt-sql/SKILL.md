@@ -14,7 +14,7 @@ description: >
 | Domain | Rule |
 |--------|------|
 | Ad-hoc | `dbt show --inline "select * from {{ ref('relation') }}" --limit n --output json"`. No limit in SQL. |
-| Names | Kebab-case (`first-word-second-word`) for values, enums, files. |
+| Names | `lower_snake_case` (`first_word_second_word`) for values, enums, files. |
 | Map vs Lookup | `lookup_` for simple dictionary/static reference data (ID to value). `map_` for bridging/translating between systems or many-to-many relationships. Do not mix. |
 | Kimball | Strictly adhere to Kimball dimensional modeling best practices. |
 <!-- /rule -->
