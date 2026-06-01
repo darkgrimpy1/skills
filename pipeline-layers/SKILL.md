@@ -2,7 +2,7 @@
 name: pipeline-layers
 description: >
   Layer responsibility rules for any data pipeline. Defines purpose and
-  boundaries of `src`, `stg`, `int`, `mart`. Engine-agnostic (SQL/dbt, M/pbiflow,
+  boundaries of `src`, `stg`, `int`, `mart`/`model`, `pres`. Engine-agnostic (SQL/dbt, M/pbiflow,
   Spark, dlt). Triggers on "pipeline layers", "src/stg/int/mart layer",
   "layer responsibility", "data modelling layers".
 ---
@@ -12,11 +12,17 @@ description: >
 ## Layers
 
 ```
-src  →  stg  →  int  →  mart
-raw     typed   logic   consumable
+src  →  stg  →  int  →  mart  →  pres
+raw     typed   logic   consumable  user-facing
 ```
 
 One model = one file. Ext follows engine. Naming: `<layer>_<entity>[_<qualifier>]`, snake_case.
+
+**Layer name aliases:** `mart` and `model` interchangeable (Kimball consumable layer). Pick one per repo, stay consistent.
+
+**Presentation layer:** folder word is `presentation` (or `pres`); file suffix is `pres`. Pure rename layer — friendly column names, no table renames, no new modelling logic.
+
+**Layer order prefix:** numeric prefix (`00_`, `01_`, `02_`…) is inferred from folder structure, not hard-coded. Read the model folders, sort, assign order. `src`=lowest. Don't assume a fixed number per layer.
 
 ## `src` — Source
 
@@ -42,12 +48,45 @@ One model = one file. Ext follows engine. Naming: `<layer>_<entity>[_<qualifier>
 
 **Allowed:** rename to `lower_snake_case` · type cast · column selection (subset) · stable, value-preserving transforms (e.g. strip currency symbols, parse dates) · rename source-metadata cols.
 
-**Forbidden:** row filtering · joins · refs to other `stg` · business-rule logic that may evolve · derived/calculated columns · aggregations · deduplication.
+**Forbidden:** joins · refs to other `stg` · business-rule logic that may evolve · derived/calculated columns · aggregations · deduplication.
+
+**Row filtering (conditional):** Allowed **only** when the excluded rows are *permanently* out of scope and you are absolutely certain no future requirement will need them back — e.g. a fixed test/UAT domain, or SCD2 non-current rows. If there is any chance the rows return to scope, filter in `int` instead. When in doubt, do not filter here.
 
 **Why:** downstream depends on `stg` schema as a contract. Anything volatile belongs in `int`.
 
 **Test:** row count == `src` row count. Schema stable across runs.
 
-## `int` / `mart`
+## `int` — Intermediate
 
-TBD.
+**Purpose:** All reshaping, conforming, and **key minting**. The only layer where cross-entity joins and business logic live. Produces reusable building blocks (conformed spines, mapping tables) for the consumable layer.
+
+**Allowed:** join · unpivot/pivot · union · distinct · dedup · survivorship (alias collapse) · cross-join · calendar/spine generation · business-rule row filter · derived cols · **mint surrogate keys** (sequence/index) for entities whose key is not computable from a natural key.
+
+**May reference:** `src`, `stg`, `seed`, other `int`. **Never** reads `model`/`mart` or `pres` (no reading down a layer — that's why spines belong here, not in `model`).
+
+**Why:** one place to look for logic; keeps `model`/`pres` thin and `stg` stable.
+
+## `mart` / `model` — Consumable
+
+**Purpose:** Assemble Kimball dimensions and facts from `int_*` / `seed_*`. Thin shaping only — select, rename to physical names, resolve FKs. No new reshaping.
+
+**Naming:** `dimension_<entity>` / `fact_<entity>` (full word `dimension`, not `dim`).
+
+**Allowed:** select/rename · FK resolution · `is_*` flags trivially derived from present cols.
+
+**Reference rule (strict):**
+- Reads `int_*` / `seed_*` (upstream) and functions.
+- **Never references a sibling `model`/`mart`** — no dim→dim, no fact→dim, no fact→fact. Anything a sibling would provide (e.g. a surrogate key) must be minted upstream in `int` and joined from there.
+- **May read `stg` directly only** when an `int` model would be a pure, trivial, single-use passthrough. If the table is real computation or a candidate conformed spine, build it in `int` instead (because `int` can't read `model`).
+
+## `pres` — Presentation
+
+**Purpose:** Pure rename to user-facing labels. The semantic/report layer's friendly face.
+
+**Naming:** `pres_<entity>` (e.g. `pres_dimension_risk`), 1:1 with its `model` parent.
+
+**Allowed:** rename columns to `Title Case` friendly names **only** — including FK keys (`risk_owner_key` → `"Risk Owner Key"`).
+
+**Forbidden:** any logic · row add/drop · new/derived columns · **renaming the table/model itself** · referencing anything other than its single `model` parent.
+
+**Why:** report authors bind to stable friendly names; all modelling stays in `model`/`int`.

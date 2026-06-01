@@ -15,6 +15,7 @@ description: >
 |--------|------|
 | Ad-hoc | `dbt show --inline "select * from {{ ref('relation') }}" --limit n --output json"`. No limit in SQL. |
 | Names | `lower_snake_case` (`first_word_second_word`) for values, enums, files. |
+| Keys | Surrogate & foreign keys named `<entity>_key` (`risk_key`, `domain_key`). A dimension PK and every fact FK that references it share the *identical* `<entity>_key` name. Keep the natural/business id as `<entity>_id` (degenerate). |
 | Map vs Lookup | `lookup_` for simple dictionary/static reference data (ID to value). `map_` for bridging/translating between systems or many-to-many relationships. Do not mix. |
 | Kimball | Strictly adhere to Kimball dimensional modeling best practices. |
 <!-- /rule -->
@@ -60,7 +61,19 @@ Order: Source CTE → Transform CTE → Final Select.
 **Surrogate Keys:** Build keys from raw natural identifiers (e.g. `submission_id`), not nested surrogate keys (e.g. `submission_key`).
   - ❌ `dbt_utils.generate_surrogate_key(['submission_key', 'product_key'])`
   - ✅ `dbt_utils.generate_surrogate_key(['submission_id', 'product_internal_name'])`
+
+**FK Resolution — prefer compute, join is the fallback:** Compute a fact/dim foreign key, don't join, whenever the key is derivable. Priority:
+  1. **Single natural key** — use a narrow business value directly (e.g. `lower(trim(domain))`). No join, no hash needed.
+  2. **Hash** — for composite or derived keys, always hash when the engine provides one (`dbt_utils.generate_surrogate_key`). The hash is narrow and deterministic; dim and fact compute the same key independently. Concatenate raw strings (`org || '|' || discipline`) only when no native hash exists — a long composite costs storage and comparison time.
+  3. **Join** — only when the key is not computable: sequence/identity surrogates, survivorship/fuzzy-matched keys, or SCD2 point-in-time lookups.
+
+Always provide an Unknown member (key `0` / `-1` or `'(unspecified)'`). Computed keys return the sentinel; left joins coalesce to it.
+  - ❌ `left join dim_domain using (domain)` to fetch a key derivable as `lower(trim(domain))`.
+  - ✅ `lower(trim(domain)) as domain_key` (natural key, no join).
+  - ✅ `dbt_utils.generate_surrogate_key(['organisation', 'discipline']) as rbs_key` (hash, no join).
 <!-- /rule -->
+
+<!-- rule domain="sql" -->
 
 ## 📋 Example: SQL Mart
 ```sql
