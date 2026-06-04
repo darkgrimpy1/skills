@@ -29,7 +29,7 @@ Treat error as data. Never drop silent. Yield null + reason.
 - **Safe Join:** Equi-join drop null error grain. Avoid. Instead: `group by` root → `max(missing_reason)` → `left join`.
 - **Origin:** `coalesce(` upstream fail, UDF fail, local fail `)`.
 - **Python/UDF:** Return `(result, error)` tuple. Or `{"$type": "error", "error": "reason"}`.
-- **Reason Naming:** kebab-case (`missing-base-trend`). Single metric: `missing_result_reason`. Multi: prefix metric.
+- **Reason Naming:** lower_snake_case (`missing_base_trend`). Single metric: `missing_result_reason`. Multi: prefix metric.
 <!-- /rule -->
 
 <!-- rule domain="sql" -->
@@ -251,7 +251,7 @@ Before outputting code, verify against **ALL** domains:
 - [ ] **SQL Structure:** Does the SQL follow CTE sequence (`source` -> `transform` -> `final`), naming (`calculate_...`, `filter_...`), and contain a completely dumb final select?
 - [ ] **SQL Opts:** Does the `source` CTE select minimal columns and filter early? Are all aliases descriptive? Are SQL keywords lower-case?
 - [ ] **Naming:** Are enums/files `kebab-case`? Are SQL variables `lower_snake_case`? Are presentation aliases `Title Case`? Are `lookup_` vs `map_` prefixes correctly distinguished?
-- [ ] **Errors:** Are errors preserved as data (no silent drops)? Do error reasons use `kebab-case`? Do Marts filter errors out unless generating an error mart?
+- [ ] **Errors:** Are errors preserved as data (no silent drops)? Do error reasons use `lower_snake_case`? Do Marts filter errors out unless generating an error mart?
 - [ ] **YAML Tone:** Does YAML use block scalars (`|`) and document the business contract rather than SQL mechanics?
 - [ ] **YAML Rules:** Are there zero hard-coded values in docs? Are referenced identifiers wrapped in backticks? Is every concept used in 2+ models wired through a shared `doc()` block?
 - [ ] **Docs Scope:** Within-model repetition hoisted to model `description`? Cross-model concepts in doc blocks with correct scope prefix (`<source>__`, `<domain>__`, `conformed__`, `pattern__`) and correct file layout? Domain-scoped patterns kept narrow until a second consumer arrives?
