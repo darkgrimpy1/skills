@@ -32,11 +32,13 @@ One model = one file. Ext follows engine. Naming: `<layer>_<entity>[_<qualifier>
 
 **Drift policy:** `src` does not police schema drift. New/missing/reordered columns flow through. Detection and response belong downstream (`stg` contract, tests).
 
-**Forbidden:** type cast · rename · drop · reorder · currency/date/number/bool parse · derived cols (snapshot date, keys, flags, hashes) · business-rule row filter · refs to other models · value-transforming UDFs.
+**Forbidden:** semantic type cast (date/number/bool/currency parse) · rename · drop · reorder · derived cols (snapshot date, keys, flags, hashes) · business-rule row filter · refs to other models · value-transforming UDFs.
+
+**Deterministic-types exception:** Some engines must know every column type at deploy (dataflow/TMSL emit, streaming sinks). When so, cast **everything to string** — uniform, zero interpretation, still a faithful mirror. All-string is the *only* cast `src` may make; never date/number/bool here — that stays `stg`'s job. Then declare every column `string` in the schema contract.
 
 **Why:** faithful mirror. Debug = `src` vs raw export. Cleaning hides provenance.
 
-**Schema contract:** every column listed, default type.
+**Schema contract:** every column listed. Default type — or `string` everywhere under the deterministic-types exception.
 
 **Test:** swap source for hand-saved raw export → output identical post format-parse.
 
