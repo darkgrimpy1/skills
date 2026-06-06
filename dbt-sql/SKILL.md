@@ -42,13 +42,22 @@ Order: Source CTE → Transform CTE → Final Select.
 - Action: `select` minimal cols, filter broad and early (`where`/`qualify`/`distinct`). No transform.
   - ❌ `select * from {{ ref('model') }}`
   - ✅ `select id, name, date from {{ ref('model') }}`
+- Comment: First line declare grain — concrete columns, match .yml.
 
 **Transform CTE:**
 - Add col: `select *, <new_col>`.
 - Name: Verb + domain. No abbreviations. `calculate_` (logic), `filter_` (dedupe).
   - ❌ `final`, `f`, `joined_data`
   - ✅ `calculate_school_status`, `filter_latest_records`
-- Comment: First line declare grain (match .yml).
+- Comment: First line declare grain — concrete columns, match .yml.
+
+**Grain comment (every CTE):**
+First line names the concrete columns that identify a row — a debugging aid, not a vague label.
+  - ❌ `-- Grain: one row per posting line`
+  - ✅ `-- Grain: workspace_id, dataset_id, trend_id, trend_detail_key`
+Pass-through repeats upstream grain (note why when non-obvious: `(dim joins 1:1)`). No column set keys a row — grain is unknown; name the cause:
+  - ✅ `-- Grain: unknown — upstream declares no grain`
+  - ✅ `-- Grain: unknown — ITEM line id dropped upstream`
 
 **Aliases:** Descriptive.
   - ❌ `from employee as e`
