@@ -14,6 +14,7 @@ description: >
 | Domain | Rule |
 |--------|------|
 | Ad-hoc | `dbt show --inline "select * from {{ ref('relation') }}" --limit n --output json"`. No limit in SQL. |
+| Selectors | Always quote the `-s` / `--select` selector: `dbt build -s "model_name"`, `dbt run -s "+model_name"`, `dbt test -s "tag:foo"`. Same for `--exclude`. |
 | Names | `lower_snake_case` (`first_word_second_word`) for values, enums, files. |
 | Keys | Surrogate & foreign keys named `<entity>_key` (`risk_key`, `domain_key`). A dimension PK and every fact FK that references it share the *identical* `<entity>_key` name. Keep the natural/business id as `<entity>_id` (degenerate). |
 | Map vs Lookup | `lookup_` for simple dictionary/static reference data (ID to value). `map_` for bridging/translating between systems or many-to-many relationships. Do not mix. |
@@ -127,12 +128,15 @@ No hard-coded values in docs. Use descriptive placeholders instead.
   - ✅ `description: |
       Default limit is set to `max_row_count`.`
 
-**Referencing:**
-Do not repeat concepts. Reference identifiers (columns, models) via backticks.
+**Backticks:**
+Wrap in backticks:
+  - Identifiers (columns, models, sources, macros). Do not repeat the concept in prose — reference it.
+  - SQL/language keywords and literal values: `true`, `false`, `null`, `0`, `where`, `coalesce`, etc.
+
   - ❌ `description: |
-      Matches the start date to the term start date.`
+      Matches the start date to the term start date. Populated when is producing is true.`
   - ✅ `description: |
-      Matches `start_date` to `term_start_date`.`
+      Matches `start_date` to `term_start_date`. Populated when `is_producing` is `true`.`
 
 **Sentence Form:**
 Every doc body (inline `description`, `{% docs %}` block, hoisted clause body) is one or more complete sentences — capitalised, full-stopped, grammatical alone. Composition happens by concatenation: sentence + space + sentence, or sentence introduced by a colon. Never inline a doc body mid-sentence; capitalisation and full stops must survive.
@@ -166,9 +170,11 @@ Use doc blocks for concepts referenced across 2+ models. Name with scope prefix:
   - `conformed__` — enterprise-wide conformed dim/measure (e.g. `conformed__date`).
   - `pattern__` — subject-agnostic modelling mechanic (e.g. `pattern__grain`, `pattern__pbi_escaped`).
 
-File layout:
-  - Source: `models/00_source/<source>.md` next to `<source>.yml`.
-  - All other scopes: `models/_docs/<scope>.md` (one file per domain; `_conformed.md`, `_patterns.md` for project-wide).
+File layout: colocate doc-block `.md` files next to the `.yml` files they document, per subdirectory (dbt-Labs idiom). Use a leading underscore (`_<scope>.md`) so the file sorts to the top of its folder. A single scope may span multiple files across folders — concepts live in the folder of the model that introduces them. Examples:
+  - Raw seed concepts: `seeds/<domain>/_<scope>.md`.
+  - Raw source concepts: `models/00_source/_<scope>.md`.
+  - Derived concepts: `models/<NN_layer>/<domain>/_<scope>.md` (same folder as the dim/fact/transform yml).
+  - Project-wide scopes (`conformed__`, `pattern__`): `models/_docs/_conformed.md` / `_patterns.md`.
 
 Promotion: start narrow. Promote `<domain>__` → `pattern__` only when a second consumer exists (rule of two). Patterns live under the narrowest scope that owns them — a pattern used by one source stays in `<source>__` until a second source adopts it.
 
@@ -222,9 +228,9 @@ When description needs shared body + col-specific reference, wrap `doc()` in a m
   - ❌ Hand-copy col name into 25 inline descriptions.
   - ✅ `description: "{{ sort_order_doc('phase_description_pbi_escaped') }}"`
 
-**Fact Tables (`03_marts/fct_*` or `04_marts/fct_*`):**
+**Fact Tables:**
 Surrogate key `<name>_key` first col. Use `dbt_utils.generate_surrogate_key`. Needs `unique`, `not_null` test.
-Fact tables must include `relationships` test to all associated Dim tables.
+Fact tables must include `relationships` test to all associated dimension tables.
 
 **Test Syntax:**
 All test configurations must nest under `arguments`. Same applies to `relationships`, `expression_is_true`, etc.
@@ -235,7 +241,7 @@ tests:
         combination_of_columns: [col_a, col_b]
   - relationships:
       arguments:
-        to: ref('dim_submission')
+        to: ref('dimension_submission')
         field: submission_key
 ```
 
@@ -262,10 +268,10 @@ Before outputting code, verify against **ALL** domains:
 - [ ] **Naming:** Are enums/files `kebab-case`? Are SQL variables `lower_snake_case`? Are presentation aliases `Title Case`? Are `lookup_` vs `map_` prefixes correctly distinguished?
 - [ ] **Errors:** Are errors preserved as data (no silent drops)? Do error reasons use `lower_snake_case`? Do Marts filter errors out unless generating an error mart?
 - [ ] **YAML Tone:** Does YAML use block scalars (`|`) and document the business contract rather than SQL mechanics?
-- [ ] **YAML Rules:** Are there zero hard-coded values in docs? Are referenced identifiers wrapped in backticks? Is every concept used in 2+ models wired through a shared `doc()` block?
+- [ ] **YAML Rules:** Are there zero hard-coded values in docs? Are referenced identifiers, SQL keywords, and literal values (`true`, `false`, `null`, …) wrapped in backticks? Is every concept used in 2+ models wired through a shared `doc()` block?
 - [ ] **Docs Scope:** Within-model repetition hoisted to model `description`? Cross-model concepts in doc blocks with correct scope prefix (`<source>__`, `<domain>__`, `conformed__`, `pattern__`) and correct file layout? Domain-scoped patterns kept narrow until a second consumer arrives?
 - [ ] **Contracts:** Is the Grain and Error Grain declared in the `.yml`? Does the first line of each CTE comment properly declare and match the YAML grain?
-- [ ] **Testing:** Do Fact tables (`fct_*`) have a surrogate key as the first column created from natural keys? Do Facts test `relationships` to dims? Are test configurations correctly nested under `arguments`?
+- [ ] **Testing:** Do fact tables have a surrogate key as the first column created from natural keys? Do facts test `relationships` to dimension tables? Are test configurations correctly nested under `arguments`?
 - [ ] **Kimball:** Does the model design strictly follow Kimball dimensional modeling best practices?
 
 Only output code if it strict-passes these constraints.
