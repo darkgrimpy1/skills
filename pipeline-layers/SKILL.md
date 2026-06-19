@@ -20,7 +20,7 @@ One model = one file. Ext follows engine. Naming: `<layer>_<entity>[_<qualifier>
 
 **Layer name aliases:** `mart` and `model` interchangeable (Kimball consumable layer). Pick one per repo, stay consistent.
 
-**Presentation layer:** folder word is `presentation` (or `pres`); file suffix is `pres`. Pure rename layer — friendly column names, no table renames, no new modelling logic.
+**Presentation layer:** folder word is `presentation` (or `pres`); file suffix is `pres`. Two object kinds: (1) **rename face** — 1:1 friendly-name view over a Kimball `model` parent, no logic; (2) **report object** — a standalone report-shaped output (`pres_rpt_*`) that may assemble, pad, filter, and conform for a specific consumer. Reusable modelling logic still lives upstream; report objects may compute report-only columns (labels, row ids, layout flags) but not anything another object would reuse.
 
 **Layer order prefix:** numeric prefix (`00_`, `01_`, `02_`…) is inferred from folder structure, not hard-coded. Read the model folders, sort, assign order. `src`=lowest. Don't assume a fixed number per layer.
 
@@ -83,12 +83,24 @@ One model = one file. Ext follows engine. Naming: `<layer>_<entity>[_<qualifier>
 
 ## `pres` — Presentation
 
-**Purpose:** Pure rename to user-facing labels. The semantic/report layer's friendly face.
+**Purpose:** The semantic/report layer's user-facing face. Two kinds of object.
 
-**Naming:** `pres_<entity>` (e.g. `pres_dimension_risk`), 1:1 with its `model` parent.
+### Kind 1 — Rename face
+
+**Purpose:** Pure rename to user-facing labels. 1:1 with a `model` parent.
+
+**Naming:** `pres_<entity>` (e.g. `pres_dimension_risk`).
 
 **Allowed:** rename columns to `Title Case` friendly names **only** — including FK keys (`risk_owner_key` → `"Risk Owner Key"`).
 
-**Forbidden:** any logic · row add/drop · new/derived columns · **renaming the table/model itself** · referencing anything other than its single `model` parent.
+**Forbidden:** any logic · row add/drop · new/derived columns · renaming the table/model itself · referencing anything other than its single `model` parent.
 
-**Why:** report authors bind to stable friendly names; all modelling stays in `model`/`int`.
+### Kind 2 — Report object
+
+**Purpose:** A standalone report output shaped for one specific consumer (a template, an export, a fixed layout) that no Kimball object represents 1:1.
+
+**Naming:** `pres_rpt_<entity>` — the `rpt` qualifier marks it as a report object, not a rename face.
+
+**Allowed (report-shaping only):** assemble from upstream `model`/`int` · pad to a spine so every required slot renders · filter to the report's scope · conform a key to the report's required form · derive report-only columns used by no other object — display labels, layout flags, a row id from natural-key concat · emit presentation-typed values (e.g. ISO date strings).
+
+**Forbidden:** new **modelling** logic — business rules, valuations, key derivations that other objects would reuse · a fresh surrogate/sequence key (mint those in `int`). That stays in `int`. A report object shapes for its consumer; it does not become a source of truth.
