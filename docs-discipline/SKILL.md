@@ -15,7 +15,7 @@ Use this skill when you:
 - Touch code that already has documentation.
 - Edit a code region containing doc violations — fix the surrounding docs too, even if not asked.
 
-## Rule 1 — No diff narration
+## Rule 1 — Write greenfield (no diff or provenance narration)
 
 **Diff narration** is a comment that narrates the change instead of describing current state. It rots the instant the diff lands.
 
@@ -35,6 +35,34 @@ Keep current-state framing only when it earns its place:
 ```python
 # Token must be validated before parse — parser trusts claims blindly
 ```
+
+**Greenfield.** Diff narration is the *temporal* case of a wider rule: describe the thing as if built from scratch, in its current state. The *spatial* case is **provenance narration** — narrating where the thing came from, what it replaces, or upstream lineage/mechanics, as if that were its description. It rots and distracts from what the thing *is*, just like a diff.
+
+Kill these:
+
+```python
+# Replaces the legacy interest calc        ← provenance
+# Ported from the Access version           ← provenance
+# Reads the P&L legs of the upstream join  ← lineage mechanics as description
+```
+
+This binds **descriptive** docs — README, CONTEXT.md, schema/yml descriptions, docstrings: say what the thing *is* and *means*, not how it was wired or what it succeeded. (Explaining *why* a choice was made is still allowed — that's rationale, see below — provenance is narrating the history, not the reason.)
+
+**Carve-out — comparison docs.** When the document's *purpose* is comparison — a changelog, a migration guide, an ADR's Considered Options, a deliberate before/after — provenance and diffs are the whole point. Write them. The greenfield rule binds descriptive docs, not comparative ones.
+
+Example — an ADR whose contract *requires* it to flag what it supersedes and justify why:
+
+```md
+# Source the account dimension from finance master
+
+Status: supersedes ADR-0014.
+
+ADR-0014 drew the account dimension from the template `Mapping` sheet; we now
+source it from the finance master, because the template drifted out of sync. That
+provenance is the decision's substance — name it.
+```
+
+Here "supersedes ADR-0014" and "drew from … now source from" are provenance on purpose: the doc exists to record a reversal. Greenfield would gut it. Contrast a *descriptive* doc — the dimension's yml — which says only what the account dimension *is* today, never that it once came from the template.
 
 ## Rule 2 — Make code self-documenting first
 
@@ -80,6 +108,26 @@ def total(items):
     return sum(item.price for item in items)
 ```
 
+## Rule 4 — Describe the axis, don't enumerate volatile members
+
+Docs must survive membership drift. Before listing members, ask: closed and definitional, or open and volatile?
+
+- **Closed, definitional** — the full list *is* the meaning. List it all.
+- **Open or volatile** — describe what the axis *means*, not its current members. Drop an example only if it earns understanding; never an exhaustive list.
+- **Dependent / derived term** — when a term's meaning is a predicate over another enum (`Active` = pre-decision statuses), define it by the *criterion*, not the member list, so new members self-classify. Keep the authoritative members in one place (seed/dimension/enum) and reference it; never duplicate the list into prose.
+
+```text
+✓ movement_type — whether a row is a dated flow or a period-opening anchor.
+✓ Account type — P&L or Balance Sheet; the closed pair is the definition.
+✗ movement_type — Transaction, Opening Balance, …          (rots on the next member)
+✗ Account type — P&L, …                                    (truncating a closed set loses the definition)
+
+✓ Active — a not-yet-resolved status; canonical members live in dimension_status.
+✗ Active — Under-Review or Pending     (rots on a new pre-decision status, and forks the source of truth)
+```
+
+A bare enumeration of a volatile set is diff-narration waiting to happen — correct only until the data changes, then it silently lies.
+
 ## When a comment IS warranted
 
 Add a comment only when it carries information the code cannot:
@@ -95,6 +143,7 @@ Add a comment only when it carries information the code cannot:
 ## Anti-patterns — delete on sight
 
 - Diff narration (Rule 1).
+- Provenance narration in descriptive docs — "replaces X", "ported from Y", upstream lineage as description (Rule 1).
 - Restating what the code plainly says.
 - Commented-out code — git remembers; delete it.
 - Noise comments (`# constructor`, `# getter`).
@@ -108,13 +157,3 @@ A stale comment is worse than no comment. Keep each comment next to the code it 
 ## Style — caveman lite
 
 Write all comments and docs in **caveman lite** style. If you have not already read the `caveman` skill this session, read it now with the `read_file` tool before writing, then apply the **lite** level. Do not paraphrase the rules from memory — the skill is the source of truth.
-
-This covers inline comments, docstrings, README, CONTEXT.md, ADRs, and other prose docs. It does **not** cover commit messages or PR descriptions — those are out of scope for this skill.
-
-```python
-# Bad (filler): We should probably just make sure to check if the user is
-# actually valid here before we go ahead and continue with the request.
-
-# Good (caveman lite): Reject invalid user before processing — downstream
-# trusts the user object.
-```
