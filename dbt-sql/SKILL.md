@@ -250,8 +250,12 @@ tests:
   - ✅ `description: "{{ doc('prismg2__workspace_id') }}"` on both `project_id` (source) and `workspace_id` (downstream).
 
 **Grain & Error Grains Contract:**
+The `Grain:` line, and any `Error Grains:`, go at the END of the `description`, after the business prose — never first.
 ```yaml
 description: |
+  Represents one assessed result per student per school year, with structural-base
+  and grade enrichments applied.
+
   Grain: `school_id`, `school_year`
 
   Error Grains:
