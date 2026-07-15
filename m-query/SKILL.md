@@ -32,3 +32,14 @@ nested table per row with `each`.
 - ✅ `Table.ExpandTableColumn(j, "_j", {"v"}, {"v"})` — set-based, cheap.
 
 Coalesce a missing match after expand (`[v] ?? 0`), not inside the `each`.
+
+### 3 — Narrow before expand
+
+Reduce the column set *before* `Table.ExpandTableColumn` / `Table.ExpandListColumn`.
+Expand copies every carried column onto each new row, so a wide input balloons the
+buffer. Non-folding queries must do it — the local engine prunes nothing for you;
+when folding, still worth it to nudge the source optimiser to select fewer columns.
+
+- ❌ expand first, narrow after — wide columns duplicated, then dropped.
+- ✅ `Table.SelectColumns(j, {"id", "_j"})` then `Table.ExpandTableColumn(...)`.
+- ✅ `Table.RemoveColumns(j, {"notes", "raw"})` then `Table.ExpandTableColumn(...)`.
