@@ -21,19 +21,38 @@ Use this skill when you:
 
 Comment describe what *is*, never what *changed*. Change story belong in commit message or PR, not code. (Literature calls this a "journal comment", from *Clean Code*.)
 
-Kill these:
+Kill these — each wraps a legitimate *why* in change story:
 
 ```python
-# Now we validate the token before parsing   ← diff narration
-# Changed to use a set for faster lookup      ← diff narration
-# This used to call the old API               ← diff narration
-# Updated to handle the null case             ← diff narration
+# Now we validate the token before parse — parser trusts claims blindly
+# Changed to a set: duplicate SKUs double-counted with a list
+# No longer retries on 429: the gateway already retries
 ```
 
-Keep current-state framing only when it earns its place:
+Keep the why, drop the change story:
 
 ```python
 # Token must be validated before parse — parser trusts claims blindly
+# Set, not list: duplicate SKUs would double-count
+# No retry on 429: the gateway already retries
+```
+
+When stripping the change story leaves only what the code already says (`# Updated to handle the null case` → "handles the null case"), no comment survives: delete it.
+
+Mechanical check: these words in a comment almost always mean history, not code. *Now, previously, changed, updated, moved, renamed, new, no longer, refactored, used to.* Runtime time ("now" as execution time, not writing time) is exempt from the word check. But passing greenfield is necessary, not sufficient: the other rules still apply, and they kill most temporal comments.
+
+```python
+# ✗ expires 24h from now                deictic: hides the anchor event
+# ✗ expires 24h after issuance          greenfield-clean, but Rules 2 & 4 kill it:
+#                                       the value belongs in a constant, the anchor in a name
+# ✓ expires_at = issued_at + TOKEN_TTL
+```
+
+The runtime-time comment that survives every rule names *which moment* anchors a calculation, a business rule the code cannot express:
+
+```python
+# Priced as-of query time, not order time: quotes must show the market the
+# customer sees (FIN-231). Looks stale-prone; is deliberate.
 ```
 
 **Greenfield.** Diff narration is the *temporal* case of a wider rule: describe the thing as if built from scratch, in its current state. The *spatial* case is **provenance narration** — narrating where the thing came from, what it replaces, or upstream lineage/mechanics, as if that were its description. It rots and distracts from what the thing *is*, just like a diff.
@@ -46,7 +65,7 @@ Kill these:
 # Reads the P&L legs of the upstream join  ← lineage mechanics as description
 ```
 
-This binds **descriptive** docs — README, CONTEXT.md, schema/yml descriptions, docstrings: say what the thing *is* and *means*, not how it was wired or what it succeeded. (Explaining *why* a choice was made is still allowed — that's rationale, see below — provenance is narrating the history, not the reason.)
+This binds **descriptive** docs — README, CONTEXT.md, schema/yml descriptions, docstrings: say what the thing *is* and *means*, not how it was wired or what it succeeded. (Explaining *why* a choice was made is still allowed — that's rationale, see below — provenance is narrating the history, not the reason.) Rationale is written absolutely, never comparatively: "context avoids Redux ceremony for read-heavy state", not "switched away from Redux because...".
 
 **Carve-out — comparison docs.** When the document's *purpose* is comparison — a changelog, a migration guide, an ADR's Considered Options, a deliberate before/after — provenance and diffs are the whole point. Write them. The greenfield rule binds descriptive docs, not comparative ones.
 
@@ -128,6 +147,15 @@ Docs must survive membership drift. Before listing members, ask: closed and defi
 
 A bare enumeration of a volatile set is diff-narration waiting to happen — correct only until the data changes, then it silently lies.
 
+Same rule at member-count one: never restate a constant's value in prose. Reference the name; the value lives in one place.
+
+```python
+# ✗ Returns true if not updated in the last 5 minutes   (rots when STALE_THRESHOLD changes)
+# ✓ Returns true if older than STALE_THRESHOLD
+```
+
+Carve-out: unit translation of an adjacent magic literal is clarity, not duplication. `1048576  # 1 MB` is fine.
+
 ## When a comment IS warranted
 
 Add a comment only when it carries information the code cannot:
@@ -138,14 +166,24 @@ Add a comment only when it carries information the code cannot:
 - **Surprising "why not"** — code that looks like a bug but is correct. A rejected *design* belongs in an ADR, not a comment; if the repo documents ADRs, write the ADR and link it from the comment.
 - **External reference** — link a spec, ticket, RFC, or ADR.
 - **TODO / FIXME** — flagged debt, with context (ticket, owner, reason). Bare `TODO` is useless.
-- **Public API docstring** — the contract callers read instead of the body. Allowed even when "obvious", but do not restate the signature or types.
+- **Expiry condition** — every workaround, hack, or version-pinned branch states the condition under which it dies: "remove when Safari 14 support drops", with the bug link. Prefer a condition the reader can test over a calendar date; use a date only when the trigger genuinely is one (API sunset, license expiry). A workaround with no removal condition is permanent code in disguise. Forward-looking, so greenfield permits it. Carry it on a `TODO`/`HACK` marker so it is greppable — an obligation buried in prose is never found. Markers are for *obligations* only; a comment describing runtime behavior ("priced as-of query time") is plain description, no marker.
+- **Public API docstring** — the contract callers read instead of the body. Allowed even when "obvious", but do not restate the signature or types. Say what the signature cannot: behavior at the edges, error semantics, units, invariants the caller must hold.
+
+```python
+def shipping_cost(weight_kg: float, zip_code: str) -> Decimal:
+    """Quote for shipping one parcel; weight tiers live in PRICING_TIERS.
+
+    Returns 0 for destinations we don't ship to instead of raising.
+    Call can_ship_to() first to tell "free shipping" from "can't ship".
+    """
+```
 
 ## Anti-patterns — delete on sight
 
 - Diff narration (Rule 1).
 - Provenance narration in descriptive docs — "replaces X", "ported from Y", upstream lineage as description (Rule 1).
 - Restating what the code plainly says.
-- Commented-out code — git remembers; delete it.
+- Commented-out code, and headstones over deleted code ("used to retry here") — git remembers; delete both.
 - Noise comments (`# constructor`, `# getter`).
 - Docstrings that just echo the signature and types.
 - Bare `TODO` with no context.
@@ -154,6 +192,4 @@ Add a comment only when it carries information the code cannot:
 
 A stale comment is worse than no comment. Keep each comment next to the code it explains and update both together. Diff narration is the worst rot — it is stale the moment it is written.
 
-## Style — caveman lite
-
-Write all comments and docs in **caveman lite** style. If you have not already read the `caveman` skill this session, read it now with the `read_file` tool before writing, then apply the **lite** level. Do not paraphrase the rules from memory — the skill is the source of truth.
+Editing code near a stale comment: fix the comment or delete it, never append a correction ("actually this also handles X now"). One comment, one truth, present tense.
